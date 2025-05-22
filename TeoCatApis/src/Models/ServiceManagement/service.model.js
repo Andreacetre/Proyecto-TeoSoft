@@ -89,9 +89,9 @@ update: async (id, tipoData) => {
   }
 };
 
-// Modelo para la tabla Servicios
+// Modelo para la tabla Servicios (actualizado)
 export const serviciosModel = {
-  // Obtener todos los servicios - CORREGIDO
+  // Obtener todos los servicios
   getAll: async (page = 1, limit = 10) => {
     try {
       // Convertir page y limit a números enteros
@@ -125,22 +125,22 @@ export const serviciosModel = {
     return servicios[0]
   },
 
-  // Crear un nuevo servicio
+  // Crear un nuevo servicio (actualizado)
   create: async (servicioData) => {
     const connection = await getConnection();
     try {
       await connection.beginTransaction();
       
+      // Actualizado para eliminar el campo Beneficios
       const [result] = await connection.query(
         `INSERT INTO Servicios 
-        (IdTipoServicio, Nombre, Foto, Descripcion, Beneficios, Que_incluye, Precio, Duracion, Estado) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (IdTipoServicio, Nombre, Foto, Descripcion, Que_incluye, Precio, Duracion, Estado) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           servicioData.IdTipoServicio,
           servicioData.Nombre,
           servicioData.Foto || null,
           servicioData.Descripcion || null,
-          servicioData.Beneficios || '',
           servicioData.Que_incluye || '',
           servicioData.Precio,
           servicioData.Duracion,
@@ -158,12 +158,12 @@ export const serviciosModel = {
     }
   },
 
-  // Actualizar un servicio
+  // Actualizar un servicio (actualizado)
   update: async (id, servicioData) => {
     let query_str = `UPDATE Servicios SET `;
     const params = [];
     
-    // Construir la consulta dinámicamente
+    // Construir la consulta dinámicamente (eliminado Beneficios)
     if (servicioData.IdTipoServicio) {
       query_str += `IdTipoServicio = ?, `;
       params.push(servicioData.IdTipoServicio);
@@ -179,10 +179,6 @@ export const serviciosModel = {
     if (servicioData.Descripcion !== undefined) {
       query_str += `Descripcion = ?, `;
       params.push(servicioData.Descripcion);
-    }
-    if (servicioData.Beneficios !== undefined) {
-      query_str += `Beneficios = ?, `;
-      params.push(servicioData.Beneficios);
     }
     if (servicioData.Que_incluye !== undefined) {
       query_str += `Que_incluye = ?, `;

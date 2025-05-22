@@ -189,10 +189,17 @@ export const serviciosController = {
     }
   },
 
-  // Crear un nuevo servicio
+  // Crear un nuevo servicio (actualizado)
   create: async (req, res) => {
     try {
       let servicioData = req.body;
+      
+      // Validar datos básicos
+      if (!servicioData.Nombre || !servicioData.IdTipoServicio || !servicioData.Precio || !servicioData.Duracion) {
+        return res.status(400).json({ 
+          message: "Nombre, tipo de servicio, precio y duración son campos obligatorios" 
+        });
+      }
       
       // Verificar si el tipo de servicio existe
       const tipo = await tipoServicioModel.getById(servicioData.IdTipoServicio);
@@ -216,7 +223,7 @@ export const serviciosController = {
     }
   },
 
-  // Actualizar un servicio
+  // Actualizar un servicio (actualizado)
   update: async (req, res) => {
     try {
       const { id } = req.params;
