@@ -1,29 +1,26 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
-import { Save, ArrowLeft, X } from "lucide-react"
+import { Save, ArrowLeft, X, Plus } from "lucide-react"
 import { ToastContainer, toast } from "react-toastify"
 import "react-toastify/dist/ReactToastify.css"
 import "../../../Styles/AdminStyles/ToastStyles.css"
 
-// Importar componentes actualizados
-import BasicInfoSection from "../../../Components/AdminComponents/ProductosComponents/BasicInfoSection"
-import AttributesAndSpecificationsSection from "../../../Components/AdminComponents/ProductosComponents/AttributesAndSpecificationsSection"
-import VariantImageSection from "../../../Components/AdminComponents/ProductosComponents/VariantImageSection"
-import AttributeTypeModal from "../../../Components/AdminComponents/ProductosComponents/AttributeTypeModal"
-import AttributeValueModal from "../../../Components/AdminComponents/ProductosComponents/AttributeValueModal"
-import VariantsSection from "../../../Components/AdminComponents/ProductosComponents/VariantsSection"
-import VariantForm from "../../../Components/AdminComponents/ProductosComponents/VariantForm"
+// Importar los nuevos componentes
+import InfoBasica from "../../../Components/AdminComponents/ProductosComponents/InfoBasica"
+import ImagenesProducto from "../../../Components/AdminComponents/ProductosComponents/ImagenesProducto"
+import VarianteProducto from "../../../Components/AdminComponents/ProductosComponents/VarianteProducto"
 import DeleteConfirmModal from "../../../Components/AdminComponents/ProductosComponents/DeleteConfirmModal"
 
 // Importar servicios
-import { uploadImageToCloudinary } from "../../../Services/uploadImageToCloudinary"
 import ProductosService from "../../../Services/ConsumoAdmin/ProductosService.js"
 import CategoriasService from "../../../Services/ConsumoAdmin/CategoriasService.js"
+import { uploadImageToCloudinary, optimizeCloudinaryUrl } from "../../../Services/uploadImageToCloudinary.js"
 
 /**
  * Componente para registrar un nuevo producto o editar uno existente
+ * Versión actualizada con nueva estructura de componentes
  */
 const RegistrarProducto = () => {
   // Obtener parámetros de la URL para edición
@@ -40,43 +37,31 @@ const RegistrarProducto = () => {
     NombreProducto: "",
     Descripcion: "",
     IdCategoriaDeProducto: "",
-    Foto: "",
-    Stock: "0",
-    Precio: "0",
-    PorcentajeIVA: "19",
-    AplicaIVA: true,
+    Stock: "",
+    UnidadMedida: "Unidad",
+    ValorUnidad: "",
+    Precio: "",
+    MargenGanancia: "",
+    PorcentajeIVA: "0",
+    AplicaIVA: false,
     CodigoBarras: "",
     Referencia: "",
     FechaVencimiento: "",
     NoVence: false,
     Caracteristicas: [],
-    Especificaciones: [],
+    Origen: "Catálogo",
+    Estado: true,
+    FotosProducto: [],
     Variantes: [],
-  })
-
-  // Estado para errores de validación
-  const [formErrors, setFormErrors] = useState({
-    NombreProducto: "",
-    Descripcion: "",
-    IdCategoriaDeProducto: "",
-    Stock: "",
-    Precio: "",
-    CodigoBarras: "",
-    Referencia: "",
-    FechaVencimiento: "",
-    attributes: "",
-  })
-
-  // Estado para mostrar el cálculo del IVA
-  const [precioConIva, setPrecioConIva] = useState({
-    valorIva: 0,
-    precioFinal: 0,
   })
 
   // Estado para manejar las imágenes
   const [imagenes, setImagenes] = useState([null, null, null, null])
   const [imagenesPreview, setImagenesPreview] = useState([null, null, null, null])
   const [imagenesLoading, setImagenesLoading] = useState([false, false, false, false])
+
+  // Estado para errores de validación
+  const [formErrors, setFormErrors] = useState({})
 
   // Estado para las categorías
   const [categorias, setCategorias] = useState([])
@@ -91,79 +76,14 @@ const RegistrarProducto = () => {
 
   // Estado para controlar si estamos creando una variante
   const [creatingVariant, setCreatingVariant] = useState(false)
-
-  // Estado para atributos
-  const [attributes, setAttributes] = useState([])
-  const [selectedAttributes, setSelectedAttributes] = useState([])
-  const [atributos, setAtributos] = useState([])
+  const [editingVariantIndex, setEditingVariantIndex] = useState(null)
 
   // Estado para modal de confirmación
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [itemToDelete, setItemToDelete] = useState(null)
 
-  // Estados para modales de atributos
-  const [showAttributeTypeModal, setShowAttributeTypeModal] = useState(false)
-  const [showAttributeValueModal, setShowAttributeValueModal] = useState(false)
-  const [selectedTipoAtributoId, setSelectedTipoAtributoId] = useState(null)
-  const [attributeValueModalCallback, setAttributeValueModalCallback] = useState(null)
-
   // Hook para navegación
   const navigate = useNavigate()
-
-  // Calcular precio con IVA usando useMemo para optimizar rendimiento
-  const calculatedPrecioConIva = useMemo(() => {
-    if (formData.Precio && formData.AplicaIVA) {
-      const precio = Number.parseFloat(formData.Precio) || 0
-      const iva = Number.parseFloat(formData.PorcentajeIVA) || 0
-      const valorIva = precio * (iva / 100)
-      const precioFinal = precio + valorIva
-
-      return {
-        valorIva: valorIva,
-        precioFinal: precioFinal,
-      }
-    } else {
-      return {
-        valorIva: 0,
-        precioFinal: Number.parseFloat(formData.Precio) || 0,
-      }
-    }
-  }, [formData.Precio, formData.PorcentajeIVA, formData.AplicaIVA])
-
-  // Actualizar el estado de precioConIva cuando cambia el cálculo
-  useEffect(() => {
-    setPrecioConIva(calculatedPrecioConIva)
-  }, [calculatedPrecioConIva])
-
-  // Función para formatear números con separadores de miles en formato colombiano
-  const formatNumber = (number) => {
-    // Asegurarse de que number sea un número
-    const num = typeof number === "string" ? Number.parseFloat(number) : number
-
-    // Verificar si es un número válido
-    if (isNaN(num)) return "0"
-
-    // Formatear con separador de miles (punto) y sin decimales para pesos colombianos
-    return num.toLocaleString("es-CO", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    })
-  }
-
-  // Mostrar el precio con IVA formateado en la interfaz
-  const displayPrecioConIva = useCallback(() => {
-    return (
-      <div className="mt-2 text-info">
-        <small>
-          <strong>Valor IVA ({formData.PorcentajeIVA}%):</strong> ${formatNumber(precioConIva.valorIva)}
-        </small>
-        <br />
-        <small>
-          <strong>Precio final con IVA:</strong> ${formatNumber(precioConIva.precioFinal)}
-        </small>
-      </div>
-    )
-  }, [precioConIva, formData.PorcentajeIVA])
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -184,25 +104,6 @@ const RegistrarProducto = () => {
         }
         setCategorias(categoriasData)
 
-        // Cargar atributos disponibles
-        try {
-          const attributesData = await ProductosService.getTiposAtributos()
-          console.log("Atributos obtenidos:", attributesData)
-          setAttributes(attributesData)
-
-          // Inicializar atributos para el componente AttributesAndSpecificationsSection
-          setAtributos(
-            attributesData.map((attr) => ({
-              id: attr.id,
-              nombre: attr.nombre,
-              valores: attr.valores || [],
-            })),
-          )
-        } catch (error) {
-          console.error("Error al cargar atributos:", error)
-          toast.error(`No se pudieron cargar los atributos. ${error.response?.data?.message || error.message}`)
-        }
-
         // Cargar productos para validación
         let productosData
         try {
@@ -218,153 +119,135 @@ const RegistrarProducto = () => {
         setProductosExistentes(productosData)
 
         // Si estamos en modo edición, cargar datos del producto
-          if (isEditing) {
-            try {
-              const productoData = await ProductosService.getById(productId);
-              console.log("Producto para edición obtenido:", productoData);
+        if (isEditing) {
+          try {
+            const productoData = await ProductosService.getById(productId)
+            console.log("Producto para edición obtenido:", productoData)
 
-              // Depurar los datos recibidos para identificar problemas
-              console.log("Datos completos del producto:", JSON.stringify(productoData, null, 2));
+            // Depurar los datos recibidos para identificar problemas
+            console.log("Datos completos del producto:", JSON.stringify(productoData, null, 2))
 
-              // Formatear datos para el formulario con manejo mejorado de valores
-              setFormData({
-                NombreProducto: productoData.NombreProducto || "",
-                Descripcion: productoData.Descripcion !== undefined ? productoData.Descripcion : "",
-                IdCategoriaDeProducto: productoData.IdCategoriaDeProducto !== undefined 
-                  ? productoData.IdCategoriaDeProducto.toString() 
-                  : "",
-                Foto: productoData.Foto || "",
-                Stock: productoData.Stock !== undefined && productoData.Stock !== null 
-                  ? productoData.Stock.toString() 
+            // Formatear datos para el formulario con manejo mejorado de valores
+            setFormData({
+              NombreProducto: productoData.NombreProducto || "",
+              Descripcion: productoData.Descripcion !== undefined ? productoData.Descripcion : "",
+              IdCategoriaDeProducto:
+                productoData.IdCategoriaDeProducto !== undefined ? productoData.IdCategoriaDeProducto.toString() : "",
+              Stock:
+                productoData.Stock !== undefined && productoData.Stock !== null ? productoData.Stock.toString() : "0",
+              UnidadMedida: productoData.UnidadMedida || "Unidad",
+              ValorUnidad: productoData.ValorUnidad !== undefined ? productoData.ValorUnidad.toString() : "1",
+              Precio:
+                productoData.Precio !== undefined && productoData.Precio !== null
+                  ? productoData.Precio.toString()
                   : "0",
-                Precio: productoData.Precio !== undefined && productoData.Precio !== null 
-                  ? productoData.Precio.toString() 
+              MargenGanancia: productoData.MargenGanancia !== undefined ? productoData.MargenGanancia.toString() : "30",
+              PorcentajeIVA:
+                productoData.PorcentajeIVA !== undefined && productoData.PorcentajeIVA !== null
+                  ? productoData.PorcentajeIVA.toString()
                   : "0",
-                PorcentajeIVA: productoData.PorcentajeIVA !== undefined && productoData.PorcentajeIVA !== null 
-                  ? productoData.PorcentajeIVA.toString() 
-                  : "19",
-                AplicaIVA: productoData.AplicaIVA === true || productoData.AplicaIVA === 1,
-                CodigoBarras: productoData.CodigoBarras !== undefined ? productoData.CodigoBarras : "",
-                Referencia: productoData.Referencia !== undefined ? productoData.Referencia : "",
-                FechaVencimiento: productoData.FechaVencimiento
-                  ? new Date(productoData.FechaVencimiento).toISOString().split("T")[0]
-                  : "",
-                NoVence: productoData.NoVence === true || productoData.NoVence === 1 || productoData.FechaVencimiento === null,
-                Caracteristicas: productoData.Caracteristicas
-                  ? (typeof productoData.Caracteristicas === 'string' 
-                    ? productoData.Caracteristicas.split(", ").filter(c => c && c.trim() !== "")
-                    : Array.isArray(productoData.Caracteristicas) 
-                      ? productoData.Caracteristicas 
-                      : [])
-                  : [],
-                Especificaciones: productoData.Especificaciones
-                  ? (typeof productoData.Especificaciones === 'string'
-                    ? productoData.Especificaciones.split(", ")
-                        .filter(e => e && e.trim() !== "")
-                        .map(e => {
-                          const parts = e.split(": ");
-                          return { 
-                            nombre: parts[0] || "", 
-                            valor: parts[1] || "" 
-                          };
-                        })
-                    : Array.isArray(productoData.Especificaciones) 
-                      ? productoData.Especificaciones 
-                      : [])
-                  : [],
-                Variantes: productoData.Variantes || [],
-              });
+              AplicaIVA: productoData.AplicaIVA === true || productoData.AplicaIVA === 1,
+              CodigoBarras: productoData.CodigoBarras !== undefined ? productoData.CodigoBarras : "",
+              Referencia: productoData.Referencia !== undefined ? productoData.Referencia : "",
+              FechaVencimiento: productoData.FechaVencimiento
+                ? new Date(productoData.FechaVencimiento).toISOString().split("T")[0]
+                : "",
+              NoVence:
+                productoData.NoVence === true || productoData.NoVence === 1 || productoData.FechaVencimiento === null,
+              Caracteristicas: productoData.Caracteristicas
+                ? typeof productoData.Caracteristicas === "string"
+                  ? productoData.Caracteristicas.split(", ").filter((c) => c && c.trim() !== "")
+                  : Array.isArray(productoData.Caracteristicas)
+                    ? productoData.Caracteristicas
+                    : []
+                : [],
+              Origen: productoData.Origen || "Catálogo",
+              Estado: productoData.Estado !== undefined ? productoData.Estado : true,
+              FotosProducto: [],
+              Variantes: productoData.Variantes || [],
+            })
 
-              // Cargar imágenes si el producto tiene fotos
-              if (productoData.Foto) {
-                console.log("Procesando fotos del producto:", productoData.Foto);
-                
-                // Asegurarse de que Foto sea una cadena antes de dividirla
-                const fotosString = typeof productoData.Foto === 'string' ? productoData.Foto : '';
-                const fotosArray = fotosString.split("|").filter(url => url && url.trim() !== '');
-                
-                console.log("Array de fotos procesado:", fotosArray);
-                
-                // Crear nuevos arrays para no mutar el estado directamente
-                const newImagenesPreview = Array(4).fill(null);
-                const newImagenes = Array(4).fill(null);
+            // Procesar imágenes
+            const imagenesArray = [null, null, null, null]
+            const imagenesPreviewArray = [null, null, null, null]
 
-                fotosArray.forEach((url, index) => {
-                  if (index < 4 && url && url.trim() !== '') {
-                    console.log(`Asignando imagen ${index}:`, url);
-                    newImagenesPreview[index] = url;
-                    newImagenes[index] = url;
+            if (productoData.FotosProducto || productoData.Foto) {
+              const fotosString = productoData.FotosProducto || productoData.Foto
+              if (fotosString) {
+                const urls = fotosString
+                  .split("|")
+                  .map((url) => url.trim())
+                  .filter((url) => url)
+
+                urls.forEach((url, index) => {
+                  if (index < 4) {
+                    imagenesArray[index] = url
+                    imagenesPreviewArray[index] = url
                   }
-                });
-
-                // Actualizar los estados de imágenes
-                setImagenesPreview(newImagenesPreview);
-                setImagenes(newImagenes);
-              } else {
-                console.log("El producto no tiene fotos o el campo Foto está vacío");
-                // Resetear las imágenes para evitar mostrar datos de un producto anterior
-                setImagenesPreview(Array(4).fill(null));
-                setImagenes(Array(4).fill(null));
+                })
               }
+            }
 
-              // Cargar atributos del producto
-              try {
-                const atributosProducto = await ProductosService.getAtributosProducto(productId);
-                console.log("Atributos del producto obtenidos:", atributosProducto);
-                
-                if (atributosProducto && Array.isArray(atributosProducto)) {
-                  const formattedAttributes = atributosProducto.map((attr) => ({
-                    id: attr.IdProductoAtributo || Date.now() + Math.random(),
-                    attributeId: attr.IdTipoAtributo || attr.idTipoAtributo,
-                    attributeName: attr.NombreTipoAtributo || attr.nombreTipoAtributo || "Tipo de atributo",
-                    valueId: attr.IdValorAtributo || attr.idValorAtributo,
-                    valueName: attr.Valor || attr.valor || "Valor",
-                  }));
-                  
-                  console.log("Atributos formateados:", formattedAttributes);
-                  setSelectedAttributes(formattedAttributes);
-                } else {
-                  console.log("No se encontraron atributos o el formato es incorrecto");
-                  setSelectedAttributes([]);
-                }
-              } catch (error) {
-                console.error("Error al cargar atributos del producto:", error);
-                toast.error(
-                  `No se pudieron cargar los atributos del producto. ${error.response?.data?.message || error.message}`
-                );
-                setSelectedAttributes([]);
-              }
+            setImagenes(imagenesArray)
+            setImagenesPreview(imagenesPreviewArray)
 
-              // Cargar variantes
-              try {
-                const variantesProducto = await ProductosService.getVariantes(productId);
-                console.log("Variantes del producto obtenidas:", variantesProducto);
-                
-                if (variantesProducto && Array.isArray(variantesProducto)) {
-                  setFormData((prev) => ({
-                    ...prev,
-                    Variantes: variantesProducto,
-                  }));
-                } else {
-                  console.log("No se encontraron variantes o el formato es incorrecto");
-                  setFormData((prev) => ({
-                    ...prev,
-                    Variantes: [],
-                  }));
-                }
-              } catch (error) {
-                console.error("Error al cargar variantes:", error);
-                toast.error(`No se pudieron cargar las variantes. ${error.response?.data?.message || error.message}`);
+            // Cargar variantes
+            try {
+              const variantesProducto = await ProductosService.getVariantes(productId)
+              console.log("Variantes del producto obtenidas:", variantesProducto)
+
+              if (variantesProducto && Array.isArray(variantesProducto)) {
+                // Procesar las variantes para asegurar que tengan el formato correcto
+                const variantesProcesadas = variantesProducto.map((variante) => {
+                  // Procesar imágenes de la variante
+                  const fotosVariante = []
+                  if (variante.FotosProducto || variante.Foto) {
+                    const fotosString = variante.FotosProducto || variante.Foto
+                    if (fotosString) {
+                      const urls = fotosString
+                        .split("|")
+                        .map((url) => url.trim())
+                        .filter((url) => url)
+
+                      urls.forEach((url, index) => {
+                        if (index < 4) {
+                          fotosVariante.push({
+                            url: url,
+                            nombre: `Imagen ${index + 1}`,
+                            principal: index === 0,
+                          })
+                        }
+                      })
+                    }
+                  }
+
+                  return {
+                    ...variante,
+                    FotosProducto: fotosVariante,
+                    Caracteristicas: variante.Caracteristicas
+                      ? typeof variante.Caracteristicas === "string"
+                        ? variante.Caracteristicas.split(", ").filter((c) => c && c.trim() !== "")
+                        : Array.isArray(variante.Caracteristicas)
+                          ? variante.Caracteristicas
+                          : []
+                      : [],
+                  }
+                })
+
                 setFormData((prev) => ({
                   ...prev,
-                  Variantes: [],
-                }));
+                  Variantes: variantesProcesadas,
+                }))
               }
             } catch (error) {
-              console.error(`Error al cargar producto con ID ${productId}:`, error);
-              toast.error(`No se pudo cargar el producto para edición. ${error.response?.data?.message || error.message}`);
+              console.error("Error al cargar variantes:", error)
+              toast.error(`No se pudieron cargar las variantes. ${error.response?.data?.message || error.message}`)
             }
+          } catch (error) {
+            console.error(`Error al cargar producto con ID ${productId}:`, error)
+            toast.error(`No se pudo cargar el producto para edición. ${error.response?.data?.message || error.message}`)
           }
+        }
       } catch (error) {
         console.error("Error general al cargar datos iniciales:", error)
         toast.error("Error al cargar datos. Por favor, intente nuevamente.")
@@ -391,53 +274,17 @@ const RegistrarProducto = () => {
   }, [isEditing, productId])
 
   /**
-   * Manejador para cambios en los inputs del formulario
-   */
-  const handleInputChange = (e) => {
-    const { name, value, type, checked, files } = e.target
-
-    if (type === "checkbox") {
-      setFormData({
-        ...formData,
-        [name]: checked,
-        // Si se marca "No vence", limpiar la fecha de vencimiento
-        ...(name === "NoVence" && checked ? { FechaVencimiento: "" } : {}),
-      })
-    } else if (type === "file") {
-      // Si es un input de tipo file, guardar el archivo
-      if (files && files[0]) {
-        setFormData({
-          ...formData,
-          [name]: files[0],
-        })
-      }
-    } else {
-      // Para otros tipos de input, guardar el valor
-      setFormData({
-        ...formData,
-        [name]: value,
-      })
-    }
-
-    // Limpiar el error específico cuando el usuario comienza a escribir
-    setFormErrors({
-      ...formErrors,
-      [name]: "",
-    })
-  }
-
-  /**
    * Manejador para el cambio del checkbox de producto existente
    */
   const handleExistingProductChange = (e) => {
     const checked = e.target.checked
     setIsExistingProduct(checked)
 
-    // Si es un producto existente, establecer el stock a 0
+    // Si es un producto existente, establecer el stock a vacío
     if (checked) {
       setFormData({
         ...formData,
-        Stock: "0",
+        Stock: "",
       })
     }
   }
@@ -468,8 +315,8 @@ const RegistrarProducto = () => {
       const newImagenesLoading = [...imagenesLoading]
 
       // Actualizar la imagen y su vista previa local temporal
-      newImagenesPreview[index] = URL.createObjectURL(file)
       newImagenes[index] = file
+      newImagenesPreview[index] = URL.createObjectURL(file)
 
       // Indicar que esta imagen está cargando
       newImagenesLoading[index] = true
@@ -483,30 +330,33 @@ const RegistrarProducto = () => {
         // Subir imagen a Cloudinary
         const imageUrl = await uploadImageToCloudinary(file, "productos")
 
-        if (imageUrl) {
-          // Actualizar la vista previa con la URL de Cloudinary
-          const updatedImagenesPreview = [...imagenesPreview]
-
-          // Revocar la URL temporal para liberar memoria si es diferente
-          if (
-            newImagenesPreview[index] &&
-            newImagenesPreview[index].startsWith("blob:") &&
-            newImagenesPreview[index] !== imageUrl
-          ) {
-            URL.revokeObjectURL(newImagenesPreview[index])
-          }
-
-          updatedImagenesPreview[index] = imageUrl
-          setImagenesPreview(updatedImagenesPreview)
-
-          // Actualizar el formData con las imágenes
-          const updatedImagenes = [...imagenes]
-          updatedImagenes[index] = imageUrl // Guardamos la URL en lugar del archivo
-
-          setImagenes(updatedImagenes)
-        } else {
-          toast.error("Error al subir la imagen. Intente nuevamente.")
+        if (!imageUrl) {
+          throw new Error("Error al subir la imagen a Cloudinary")
         }
+
+        // Optimizar la URL para mejor rendimiento
+        const optimizedUrl = optimizeCloudinaryUrl ? optimizeCloudinaryUrl(imageUrl) : imageUrl
+
+        // Actualizar la vista previa con la URL de Cloudinary
+        const updatedImagenesPreview = [...imagenesPreview]
+
+        // Revocar la URL temporal para liberar memoria si es diferente
+        if (
+          newImagenesPreview[index] &&
+          newImagenesPreview[index].startsWith("blob:") &&
+          newImagenesPreview[index] !== optimizedUrl
+        ) {
+          URL.revokeObjectURL(newImagenesPreview[index])
+        }
+
+        updatedImagenesPreview[index] = optimizedUrl
+        setImagenesPreview(updatedImagenesPreview)
+
+        // Actualizar el formData con las imágenes
+        const updatedImagenes = [...imagenes]
+        updatedImagenes[index] = optimizedUrl // Guardamos la URL en lugar del archivo
+
+        setImagenes(updatedImagenes)
       } catch (error) {
         console.error("Error al subir la imagen:", error)
         toast.error("Error al subir la imagen. Intente nuevamente.")
@@ -548,295 +398,12 @@ const RegistrarProducto = () => {
   }
 
   /**
-   * Función para simular el escaneo de un código de barras
-   */
-  const handleScanBarcode = () => {
-    // Generar un código de barras aleatorio de 13 dígitos (formato EAN-13)
-    const randomBarcode = Math.floor(Math.random() * 9000000000000) + 1000000000000
-
-    setFormData({
-      ...formData,
-      CodigoBarras: randomBarcode.toString(),
-    })
-
-    // Limpiar el error si existía
-    setFormErrors({
-      ...formErrors,
-      CodigoBarras: "",
-    })
-
-    toast.success(`Código de barras generado: ${randomBarcode}`)
-  }
-
-  /**
-   * Manejador para agregar una nueva característica
-   */
-  const handleAddCaracteristica = (caracteristica) => {
-    if (caracteristica.trim() === "") {
-      return
-    }
-
-    // Verificar si la característica ya existe
-    if (formData.Caracteristicas.includes(caracteristica.trim())) {
-      toast.error("Esta característica ya ha sido agregada")
-      return
-    }
-
-    // Agregar la nueva característica
-    const updatedCaracteristicas = [...formData.Caracteristicas, caracteristica.trim()]
-
-    // Actualizar el formData
-    setFormData({
-      ...formData,
-      Caracteristicas: updatedCaracteristicas,
-    })
-
-    toast.success(`Característica "${caracteristica.trim()}" agregada correctamente`)
-  }
-
-  /**
-   * Manejador para eliminar una característica
-   * @param {Number} index - Índice de la característica a eliminar
-   */
-  const handleRemoveCaracteristica = (index) => {
-    const updatedCaracteristicas = [...formData.Caracteristicas]
-    const caracteristicaEliminada = updatedCaracteristicas[index]
-    updatedCaracteristicas.splice(index, 1)
-
-    setFormData({
-      ...formData,
-      Caracteristicas: updatedCaracteristicas,
-    })
-
-    toast.info(`Característica "${caracteristicaEliminada}" eliminada`)
-  }
-
-  /**
-   * Manejador para agregar una nueva especificación
-   */
-  const handleAddEspecificacion = (especificacion) => {
-    if (especificacion.nombre.trim() === "" || especificacion.valor.trim() === "") {
-      return
-    }
-
-    // Verificar si ya existe una especificación con el mismo nombre
-    const existeNombre = formData.Especificaciones.some(
-      (spec) => spec.nombre.toLowerCase() === especificacion.nombre.trim().toLowerCase(),
-    )
-
-    if (existeNombre) {
-      toast.error("Ya existe una especificación con este nombre")
-      return
-    }
-
-    // Agregar la nueva especificación
-    const updatedEspecificaciones = [
-      ...formData.Especificaciones,
-      {
-        nombre: especificacion.nombre.trim(),
-        valor: especificacion.valor.trim(),
-      },
-    ]
-
-    // Actualizar el formData
-    setFormData({
-      ...formData,
-      Especificaciones: updatedEspecificaciones,
-    })
-
-    toast.success(
-      `Especificación "${especificacion.nombre.trim()}: ${especificacion.valor.trim()}" agregada correctamente`,
-    )
-  }
-
-  /**
-   * Manejador para eliminar una especificación
-   * @param {Number} index - Índice de la especificación a eliminar
-   */
-  const handleRemoveEspecificacion = (index) => {
-    const updatedEspecificaciones = [...formData.Especificaciones]
-    const especificacionEliminada = updatedEspecificaciones[index]
-    updatedEspecificaciones.splice(index, 1)
-
-    setFormData({
-      ...formData,
-      Especificaciones: updatedEspecificaciones,
-    })
-
-    toast.info(`Especificación "${especificacionEliminada.nombre}: ${especificacionEliminada.valor}" eliminada`)
-  }
-
-  /**
-   * Manejador para guardar una variante
-   */
-  const handleSaveVariant = (variantData) => {
-    // Agregar la variante al producto base
-    const updatedVariantes = [
-      ...formData.Variantes,
-      {
-        id: Date.now(), // Generamos un ID único temporal
-        ...variantData,
-      },
-    ]
-
-    setFormData({
-      ...formData,
-      Variantes: updatedVariantes,
-    })
-
-    // Salir del modo de creación de variante
-    setCreatingVariant(false)
-
-    // Mostrar mensaje de éxito
-    toast.success("Variante creada correctamente")
-
-    // Cambiar a la pestaña de variantes
-    setActiveTab("variantes")
-  }
-
-  /**
-   * Manejador para editar una variante
-   */
-  const handleEditVariant = (variantId) => {
-    // Implementar lógica para editar variante
-    toast.info(`Editando variante con ID: ${variantId}`)
-    // Aquí se podría navegar a una página de edición o mostrar un modal
-  }
-
-  /**
-   * Manejador para confirmar eliminación de variante
-   */
-  const handleConfirmDeleteVariant = (variantId) => {
-    setItemToDelete({ id: variantId, type: "variante" })
-    setShowDeleteModal(true)
-  }
-
-  /**
-   * Manejador para eliminar una variante
-   */
-  const handleDeleteVariant = () => {
-    if (!itemToDelete || itemToDelete.type !== "variante") return
-
-    const updatedVariantes = formData.Variantes.filter((v) => v.id !== itemToDelete.id)
-
-    setFormData({
-      ...formData,
-      Variantes: updatedVariantes,
-    })
-
-    toast.success("Variante eliminada correctamente")
-    setShowDeleteModal(false)
-    setItemToDelete(null)
-  }
-
-  /**
-   * Cancelar eliminación
-   */
-  const handleCancelDelete = () => {
-    setShowDeleteModal(false)
-    setItemToDelete(null)
-  }
-
-  /**
-   * Manejador para la creación de un nuevo tipo de atributo
-   */
-  const handleAttributeTypeCreated = (nuevoTipo) => {
-    setShowAttributeTypeModal(false)
-    // Mostrar mensaje de éxito
-    toast.success(`Tipo de atributo "${nuevoTipo.nombre}" creado correctamente`)
-
-    // Recargar tipos de atributos
-    const fetchAttributes = async () => {
-      try {
-        const attributesData = await ProductosService.getTiposAtributos()
-        setAttributes(attributesData)
-
-        // Actualizar también el estado atributos para mantener sincronizados ambos estados
-        setAtributos(
-          attributesData.map((attr) => ({
-            id: attr.id,
-            nombre: attr.nombre,
-            valores: attr.valores || [],
-          })),
-        )
-      } catch (error) {
-        console.error("Error al recargar atributos:", error)
-        toast.error("No se pudieron recargar los tipos de atributos")
-      }
-    }
-
-    fetchAttributes()
-  }
-
-  /**
-   * Manejador para la creación de nuevos valores de atributo
-   */
-  const handleAttributeValueCreated = (nuevosValores) => {
-    setShowAttributeValueModal(false)
-    setSelectedTipoAtributoId(null)
-
-    // Mostrar mensaje de éxito
-    if (Array.isArray(nuevosValores) && nuevosValores.length > 0) {
-      toast.success(`Se han creado ${nuevosValores.length} nuevos valores de atributo`)
-
-      // Actualizar la lista de atributos para incluir los nuevos valores
-      if (selectedTipoAtributoId) {
-        // Actualizar el estado de atributos
-        const updatedAtributos = atributos.map((attr) => {
-          if (attr.id === selectedTipoAtributoId) {
-            return {
-              ...attr,
-              valores: [...(attr.valores || []), ...nuevosValores],
-            }
-          }
-          return attr
-        })
-
-        setAtributos(updatedAtributos)
-
-        // También actualizar el estado de attributes para mantener sincronizados ambos estados
-        const updatedAttributes = attributes.map((attr) => {
-          if (attr.id === selectedTipoAtributoId) {
-            return {
-              ...attr,
-              valores: [...(attr.valores || []), ...nuevosValores],
-            }
-          }
-          return attr
-        })
-
-        setAttributes(updatedAttributes)
-      }
-    }
-  }
-
-  /**
-   * Abrir modal para crear nuevo valor de atributo
-   */
-  const handleOpenAttributeValueModal = (tipoAtributoId, callback) => {
-    console.log("ID del tipo de atributo seleccionado:", tipoAtributoId)
-    setSelectedTipoAtributoId(tipoAtributoId) // Asegúrate de que esto sea un número
-    setAttributeValueModalCallback(callback)
-    setShowAttributeValueModal(true)
-  }
-
-  /**
    * Validar el formulario completo
    * @returns {boolean} - True si el formulario es válido, false en caso contrario
    */
   const validateForm = () => {
-  let isValid = true;
-  const errors = {
-    NombreProducto: "",
-    Descripcion: "",
-    IdCategoriaDeProducto: "",
-    Stock: "",
-    Precio: "",
-    CodigoBarras: "",
-    Referencia: "",
-    FechaVencimiento: "",
-    attributes: "",
-  };
+    let isValid = true
+    const errors = {}
 
     // Validar nombre (requerido y único)
     if (!formData.NombreProducto?.trim()) {
@@ -878,13 +445,7 @@ const RegistrarProducto = () => {
       } else {
         const stockNum = Number(formData.Stock)
         if (isNaN(stockNum) || stockNum < 0) {
-          errors.Stock = "El stock debe ser un nmero positivo"
-          isValid = false
-        } else if (!Number.isInteger(stockNum)) {
-          errors.Stock = "El stock debe ser un número entero"
-          isValid = false
-        } else if (stockNum > 9999) {
-          errors.Stock = "El stock no puede ser mayor a 9999"
+          errors.Stock = "El stock debe ser un número positivo"
           isValid = false
         }
       }
@@ -899,35 +460,40 @@ const RegistrarProducto = () => {
       if (isNaN(precioNum) || precioNum <= 0) {
         errors.Precio = "El precio debe ser un número positivo"
         isValid = false
-      } else if (precioNum > 999999999) {
-        errors.Precio = "El precio no puede ser mayor a 999,999,999"
-        isValid = false
       }
     }
 
-    // Validar código de barras (opcional pero con formato)
-    if (formData.CodigoBarras) {
-      if (!/^\d{8,14}$/.test(formData.CodigoBarras)) {
-        errors.CodigoBarras = "El código de barras debe tener entre 8 y 14 dígitos"
-        isValid = false
-      } else {
-        // Verificar si el código de barras ya existe (excepto para el producto actual en edición)
-        const codigoExiste = productosExistentes.some(
-          (prod) =>
-            prod.CodigoBarras === formData.CodigoBarras &&
-            (!isEditing || prod.IdProducto !== Number.parseInt(productId)),
-        )
-        if (codigoExiste) {
-          errors.CodigoBarras = "Ya existe un producto con este código de barras"
-          isValid = false
-        }
-      }
-    }
-
-    // Validar referencia (opcional pero con longitud máxima)
-    if (formData.Referencia && formData.Referencia.length > 50) {
-      errors.Referencia = "La referencia no puede exceder los 50 caracteres"
+    // Validar código de barras o referencia (al menos uno debe estar presente)
+    if (!formData.CodigoBarras && !formData.Referencia) {
+      errors.CodigoBarras = "Debe proporcionar un código de barras o una referencia"
+      errors.Referencia = "Debe proporcionar un código de barras o una referencia"
       isValid = false
+    }
+
+    // Validar código de barras (formato)
+    if (formData.CodigoBarras) {
+      // Verificar si el código de barras ya existe (excepto para el producto actual en edición)
+      const codigoExiste = productosExistentes.some(
+        (prod) =>
+          prod.CodigoBarras === formData.CodigoBarras && (!isEditing || prod.IdProducto !== Number.parseInt(productId)),
+      )
+      if (codigoExiste) {
+        errors.CodigoBarras = "Ya existe un producto con este código de barras"
+        isValid = false
+      }
+    }
+
+    // Validar referencia
+    if (formData.Referencia) {
+      // Verificar si la referencia ya existe (excepto para el producto actual en edición)
+      const referenciaExiste = productosExistentes.some(
+        (prod) =>
+          prod.Referencia === formData.Referencia && (!isEditing || prod.IdProducto !== Number.parseInt(productId)),
+      )
+      if (referenciaExiste) {
+        errors.Referencia = "Ya existe un producto con esta referencia"
+        isValid = false
+      }
     }
 
     // Validar fecha de vencimiento si el producto vence
@@ -935,24 +501,21 @@ const RegistrarProducto = () => {
       errors.FechaVencimiento = "Debe ingresar una fecha de vencimiento o marcar 'No vence'"
       isValid = false
     } else if (!formData.NoVence && formData.FechaVencimiento) {
-      // Verificar que la fecha de vencimiento sea futura
+      // Verificar que la fecha no sea pasada
       const fechaVencimiento = new Date(formData.FechaVencimiento)
       const hoy = new Date()
-      hoy.setHours(0, 0, 0, 0) // Resetear la hora para comparar solo fechas
+      hoy.setHours(0, 0, 0, 0) // Establecer a medianoche para comparar solo fechas
 
       if (fechaVencimiento < hoy) {
-        errors.FechaVencimiento = "La fecha de vencimiento debe ser futura"
+        errors.FechaVencimiento = "La fecha de vencimiento no puede ser anterior a hoy"
         isValid = false
       }
     }
 
-    // Validar atributos
-    if (selectedAttributes.length > 0) {
-      const invalidAttributes = selectedAttributes.some((attr) => !attr.attributeId || !attr.valueId)
-      if (invalidAttributes) {
-        errors.attributes = "Todos los atributos deben tener un tipo y un valor seleccionados"
-        isValid = false
-      }
+    // Validar que al menos haya una imagen
+    if (!imagenes.some((img) => img !== null)) {
+      errors.imagenes = "Por favor, suba al menos una imagen para el producto"
+      isValid = false
     }
 
     setFormErrors(errors)
@@ -976,32 +539,7 @@ const RegistrarProducto = () => {
 
     // Validar el formulario
     if (!validateForm()) {
-      // Mostrar notificación de error general
-      toast.error(
-        <div>
-          <strong>Error</strong>
-          <p>Por favor, corrija los errores en el formulario.</p>
-        </div>,
-        {
-          position: "top-right",
-          autoClose: 4000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        },
-      )
-
-      // Hacer scroll al primer error
-      const firstErrorField = Object.keys(formErrors).find((key) => formErrors[key])
-      if (firstErrorField) {
-        const element = document.getElementById(firstErrorField)
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "center" })
-          element.focus()
-        }
-      }
-
+      toast.error("Por favor, corrija los errores en el formulario.")
       return
     }
 
@@ -1014,23 +552,33 @@ const RegistrarProducto = () => {
       // Concatenar las URLs con un delimitador para guardarlas en un solo campo
       const fotosString = imageUrls.join("|")
 
+      // Preparar las características para guardar
+      let caracteristicasString = ""
+      if (formData.Caracteristicas && formData.Caracteristicas.length > 0) {
+        caracteristicasString = Array.isArray(formData.Caracteristicas)
+          ? formData.Caracteristicas.join(", ")
+          : formData.Caracteristicas
+      }
+
       // Preparar los datos para enviar a la base de datos
       const productoData = {
         NombreProducto: formData.NombreProducto,
         Descripcion: formData.Descripcion || "",
         IdCategoriaDeProducto: Number.parseInt(formData.IdCategoriaDeProducto),
-        Foto: fotosString, // URLs de imágenes separadas por |
-        Stock: Number.parseInt(formData.Stock),
+        Stock: Number.parseFloat(formData.Stock),
+        UnidadMedida: formData.UnidadMedida,
+        ValorUnidad: Number.parseFloat(formData.ValorUnidad),
         Precio: Number.parseFloat(formData.Precio),
+        MargenGanancia: Number.parseFloat(formData.MargenGanancia),
         PorcentajeIVA: formData.AplicaIVA ? Number.parseFloat(formData.PorcentajeIVA) : 0,
         AplicaIVA: formData.AplicaIVA,
-        CodigoBarras: formData.CodigoBarras || null, // Cambiar a null si está vacío
-        Referencia: formData.Referencia || null, // Cambiar a null si está vacío
+        CodigoBarras: formData.CodigoBarras || null,
+        Referencia: formData.Referencia || null,
         FechaVencimiento: formData.NoVence ? null : formData.FechaVencimiento,
-        Caracteristicas: formData.Caracteristicas?.join(", ") || "",
-        Especificaciones: formData.Especificaciones?.map((item) => `${item.nombre}: ${item.valor}`)?.join(", ") || "",
-        Estado: true,
-        Variantes: formData.Variantes || [],
+        Caracteristicas: caracteristicasString,
+        Origen: formData.Origen,
+        Estado: formData.Estado,
+        FotosProducto: fotosString,
       }
 
       console.log("Datos del producto a guardar:", productoData)
@@ -1042,58 +590,61 @@ const RegistrarProducto = () => {
         await ProductosService.update(productId, productoData)
         productoId = productId
 
-        toast.success(
-          <div>
-            <strong>Producto actualizado</strong>
-            <p>El producto "{formData.NombreProducto}" ha sido actualizado correctamente.</p>
-          </div>,
-          {
-            icon: "✅",
-            position: "top-right",
-            autoClose: 3000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
-          },
-        )
+        toast.success("Producto actualizado correctamente")
       } else {
         const nuevoProducto = await ProductosService.create(productoData)
         productoId = nuevoProducto.IdProducto || nuevoProducto.id
 
-        toast.success(
-          <div>
-            <strong>Producto guardado</strong>
-            <p>El producto "{formData.NombreProducto}" ha sido guardado correctamente.</p>
-          </div>,
-          {
-            icon: "✅",
-            position: "top-right",
-            autoClose: 3000,
-            hideProgressBar: false,
-            closeOnClick: true,
-            pauseOnHover: true,
-            draggable: true,
-          },
-        )
+        toast.success("Producto guardado correctamente")
       }
 
-      // Guardar atributos si hay seleccionados
-      if (selectedAttributes.length > 0) {
+      // Guardar variantes si hay
+      if (formData.Variantes && formData.Variantes.length > 0) {
         try {
-          const atributosData = selectedAttributes
-            .filter((attr) => attr.attributeId && attr.valueId)
-            .map((attr) => ({
-              idTipoAtributo: attr.attributeId,
-              idValorAtributo: attr.valueId,
-            }))
+          // Procesar cada variante
+          for (const variante of formData.Variantes) {
+            // Preparar las fotos de la variante
+            let fotosVarianteString = ""
+            if (variante.FotosProducto && variante.FotosProducto.length > 0) {
+              fotosVarianteString = variante.FotosProducto.map((foto) => foto.url)
+                .filter((url) => url)
+                .join("|")
+            }
 
-          if (atributosData.length > 0) {
-            await ProductosService.asignarAtributosMultiples(productoId, atributosData)
+            // Preparar las características de la variante
+            let caracteristicasVarianteString = ""
+            if (variante.Caracteristicas && variante.Caracteristicas.length > 0) {
+              caracteristicasVarianteString = Array.isArray(variante.Caracteristicas)
+                ? variante.Caracteristicas.join(", ")
+                : variante.Caracteristicas
+            }
+
+            // Datos de la variante
+            const varianteData = {
+              NombreProducto: variante.NombreProducto,
+              Descripcion: variante.Descripcion || "",
+              Stock: Number.parseFloat(variante.Stock || 0),
+              Precio: Number.parseFloat(variante.Precio || productoData.Precio),
+              MargenGanancia: Number.parseFloat(variante.MargenGanancia || productoData.MargenGanancia),
+              PorcentajeIVA: variante.AplicaIVA ? Number.parseFloat(variante.PorcentajeIVA || 0) : 0,
+              AplicaIVA: variante.AplicaIVA,
+              CodigoBarras: variante.CodigoBarras || null,
+              Referencia: variante.Referencia || null,
+              Caracteristicas: caracteristicasVarianteString,
+              FotosProducto: fotosVarianteString,
+            }
+
+            // Si la variante ya existe, actualizarla; si no, crearla
+            if (variante.IdProducto || variante.id) {
+              const varianteId = variante.IdProducto || variante.id
+              await ProductosService.updateVariant(productoId, varianteId, varianteData)
+            } else {
+              await ProductosService.createVariant(productoId, varianteData)
+            }
           }
         } catch (error) {
-          console.error("Error al guardar atributos:", error)
-          toast.error("Error al guardar los atributos del producto.")
+          console.error("Error al guardar variantes:", error)
+          toast.error("Error al guardar las variantes del producto.")
         }
       }
 
@@ -1103,22 +654,7 @@ const RegistrarProducto = () => {
       }, 2000)
     } catch (error) {
       console.error("Error al guardar producto:", error)
-      toast.error(
-        <div>
-          <strong>Error al guardar producto</strong>
-          <p>
-            {error.response?.data?.message || error.message || "No se pudo guardar el producto. Intente nuevamente."}
-          </p>
-        </div>,
-        {
-          position: "top-right",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-        },
-      )
+      toast.error(error.response?.data?.message || error.message || "Error al guardar el producto")
     } finally {
       setIsSaving(false)
     }
@@ -1131,9 +667,181 @@ const RegistrarProducto = () => {
     navigate("/inventario/productos")
   }
 
-  // Si estamos creando una variante, mostrar el formulario de variante
+  /**
+   * Manejador para crear una nueva variante
+   */
+  const handleCreateVariant = () => {
+    setCreatingVariant(true)
+    setEditingVariantIndex(null)
+  }
+
+  /**
+   * Manejador para guardar una variante
+   */
+ const handleSaveVariant = (variantData) => {
+  if (editingVariantIndex !== null) {
+    // Editar variante existente
+    const updatedVariantes = [...formData.Variantes]
+    updatedVariantes[editingVariantIndex] = {
+      ...updatedVariantes[editingVariantIndex],
+      ...variantData,
+    }
+
+    setFormData({
+      ...formData,
+      Variantes: updatedVariantes,
+    })
+
+    toast.success("Variante actualizada correctamente")
+  } else {
+    // Agregar nueva variante
+    const newVariant = {
+      id: Date.now(), // ID temporal
+      ...variantData,
+      EsVariante: true,
+      ProductoBaseId: isEditing ? productId : null,
+    }
+
+    setFormData({
+      ...formData,
+      Variantes: [...formData.Variantes, newVariant],
+    })
+
+    toast.success("Variante creada correctamente")
+  }
+
+  // Salir del modo de creación/edición de variante
+  setCreatingVariant(false)
+  setEditingVariantIndex(null)
+
+  // Cambiar a la pestaña de variantes
+  setActiveTab("variantes")
+}
+
+  /**
+   * Manejador para editar una variante
+   */
+  const handleEditVariant = (index) => {
+    setEditingVariantIndex(index)
+    setCreatingVariant(true)
+  }
+
+  /**
+   * Manejador para confirmar eliminación de variante
+   */
+  const handleConfirmDeleteVariant = (index) => {
+    setItemToDelete({ index, type: "variante" })
+    setShowDeleteModal(true)
+  }
+
+  /**
+   * Manejador para eliminar una variante
+   */
+  const handleDeleteVariant = () => {
+    if (!itemToDelete || itemToDelete.type !== "variante") return
+
+    const updatedVariantes = [...formData.Variantes]
+    updatedVariantes.splice(itemToDelete.index, 1)
+
+    setFormData({
+      ...formData,
+      Variantes: updatedVariantes,
+    })
+
+    toast.success("Variante eliminada correctamente")
+    setShowDeleteModal(false)
+    setItemToDelete(null)
+  }
+
+  /**
+   * Cancelar eliminación
+   */
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false)
+    setItemToDelete(null)
+  }
+
+  // Si estamos creando o editando una variante, mostrar el formulario de variante
   if (creatingVariant) {
-    return <VariantForm baseProduct={formData} onSave={handleSaveVariant} onCancel={() => setCreatingVariant(false)} />
+    const varianteEnEdicion = editingVariantIndex !== null ? formData.Variantes[editingVariantIndex] : null
+
+    return (
+      <div className="container-fluid py-4">
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h2>{editingVariantIndex !== null ? "Editar Variante" : "Crear Nueva Variante"}</h2>
+          <button
+            className="btn btn-outline-secondary"
+            onClick={() => {
+              setCreatingVariant(false)
+              setEditingVariantIndex(null)
+            }}
+          >
+            <ArrowLeft size={18} className="me-1" />
+            Volver al Producto
+          </button>
+        </div>
+
+        <div className="card">
+          <div className="card-body">
+            <VarianteProducto
+              formData={varianteEnEdicion || {}}
+              setFormData={(data) => {
+                // Este es un manejador temporal que solo actualiza el estado local
+                // La actualización real se hace en handleSaveVariant
+                if (editingVariantIndex !== null) {
+                  const updatedVariantes = [...formData.Variantes]
+                  updatedVariantes[editingVariantIndex] = data
+                  setFormData({
+                    ...formData,
+                    Variantes: updatedVariantes,
+                  })
+                }
+              }}
+              formErrors={formErrors}
+              productoBase={formData}
+              isEditing={editingVariantIndex !== null}
+              onImageUpload={handleImageUpload}
+              onRemoveImage={handleRemoveImage}
+              imagenesLoading={imagenesLoading}
+            />
+
+            <div className="d-flex justify-content-end gap-2 mt-4">
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() => {
+                  setCreatingVariant(false)
+                  setEditingVariantIndex(null)
+                }}
+              >
+                <X size={18} className="me-1" />
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() =>
+                  handleSaveVariant(editingVariantIndex !== null ? formData.Variantes[editingVariantIndex] : {})
+                }
+                disabled={imagenesLoading.some((loading) => loading)}
+              >
+                {imagenesLoading.some((loading) => loading) ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Subiendo imágenes...
+                  </>
+                ) : (
+                  <>
+                    <Save size={18} className="me-1" />
+                    {editingVariantIndex !== null ? "Actualizar Variante" : "Guardar Variante"}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1145,8 +853,6 @@ const RegistrarProducto = () => {
           Volver a Productos
         </button>
       </div>
-
-      {/* Checkbox para producto existente */}
 
       {loading ? (
         <div className="text-center py-5">
@@ -1167,15 +873,6 @@ const RegistrarProducto = () => {
                   type="button"
                 >
                   Información Básica
-                </button>
-              </li>
-              <li className="nav-item" role="presentation">
-                <button
-                  className={`nav-link ${activeTab === "atributos" ? "active" : ""}`}
-                  onClick={() => setActiveTab("atributos")}
-                  type="button"
-                >
-                  Atributos y Especificaciones
                 </button>
               </li>
               <li className="nav-item" role="presentation">
@@ -1206,71 +903,107 @@ const RegistrarProducto = () => {
               <div className="tab-content" id="productTabsContent">
                 {/* Pestaña de Información Básica */}
                 <div className={`tab-pane fade ${activeTab === "info-basica" ? "show active" : ""}`}>
-                  <BasicInfoSection
+                  <InfoBasica
                     formData={formData}
+                    setFormData={setFormData}
                     formErrors={formErrors}
                     categorias={categorias}
-                    handleInputChange={handleInputChange}
-                    handleScanBarcode={handleScanBarcode}
                     isExistingProduct={isExistingProduct}
                     handleExistingProductChange={handleExistingProductChange}
-                    displayPrecioConIva={displayPrecioConIva} // Añadir esta línea
-                  />
-                </div>
-
-                {/* Pestaña de Atributos y Especificaciones */}
-                <div className={`tab-pane fade ${activeTab === "atributos" ? "show active" : ""}`}>
-                  <AttributesAndSpecificationsSection
-                    selectedAttributes={selectedAttributes}
-                    setSelectedAttributes={setSelectedAttributes}
-                    isVariant={false}
-                    onOpenAttributeTypeModal={() => setShowAttributeTypeModal(true)}
-                    onOpenAttributeValueModal={handleOpenAttributeValueModal}
-                    atributos={atributos}
-                    caracteristicas={formData.Caracteristicas}
-                    especificaciones={formData.Especificaciones}
-                    onAddCaracteristica={handleAddCaracteristica}
-                    onRemoveCaracteristica={handleRemoveCaracteristica}
-                    onAddEspecificacion={handleAddEspecificacion}
-                    onRemoveEspecificacion={handleRemoveEspecificacion}
                   />
                 </div>
 
                 {/* Pestaña de Imágenes */}
                 <div className={`tab-pane fade ${activeTab === "imagenes" ? "show active" : ""}`}>
-                  <VariantImageSection
-                      images={imagenesPreview}
-                      setImages={(newImages) => {
-                        // Actualizar las imágenes con las nuevas
-                        setImagenesPreview(newImages);
-                        
-                        // También actualizar el array de imagenes
-                        const updatedImagenes = [...imagenes];
-                        newImages.forEach((img, index) => {
-                          updatedImagenes[index] = img;
-                        });
-                        setImagenes(updatedImagenes);
-                      }} // Reemplazar la función vacía con esta implementación
-                      errors={formErrors}
-                      onUpload={handleImageUpload}
-                      onRemove={handleRemoveImage}
-                    />
-                  {/* Indicador de carga de imágenes */}
-                  {imagenesLoading.some((loading) => loading) && (
-                    <div className="alert alert-info mt-2 py-2">
-                      <small>Subiendo imágenes a Cloudinary...</small>
-                    </div>
-                  )}
+                  <ImagenesProducto
+                    formData={formData}
+                    setFormData={setFormData}
+                    formErrors={formErrors}
+                    imagenes={imagenes}
+                    imagenesPreview={imagenesPreview}
+                    onImageUpload={handleImageUpload}
+                    onRemoveImage={handleRemoveImage}
+                    imagenesLoading={imagenesLoading}
+                  />
                 </div>
 
                 {/* Pestaña de Variantes */}
                 <div className={`tab-pane fade ${activeTab === "variantes" ? "show active" : ""}`}>
-                  <VariantsSection
-                    productId={productId}
-                    variants={formData.Variantes}
-                    onDeleteVariant={handleConfirmDeleteVariant}
-                    onEditVariant={handleEditVariant}
-                  />
+                  <div className="mb-4">
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <h5 className="card-title mb-0">Variantes del Producto</h5>
+                      <button type="button" className="btn btn-primary" onClick={handleCreateVariant}>
+                        <Plus size={18} className="me-1" />
+                        Agregar Variante
+                      </button>
+                    </div>
+
+                    {formData.Variantes.length > 0 ? (
+                      <div className="table-responsive">
+                        <table className="table table-hover">
+                          <thead>
+                            <tr>
+                              <th>Imagen</th>
+                              <th>Nombre</th>
+                              <th>Stock</th>
+                              <th>Precio</th>
+                              <th>Código/Referencia</th>
+                              <th>Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {formData.Variantes.map((variante, index) => (
+                              <tr key={variante.id || index}>
+                                <td style={{ width: "80px" }}>
+                                  {variante.FotosProducto && variante.FotosProducto.length > 0 ? (
+                                    <img
+                                      src={variante.FotosProducto[0].url || "/placeholder.svg"}
+                                      alt={variante.NombreProducto}
+                                      className="img-thumbnail"
+                                      style={{ width: "60px", height: "60px", objectFit: "cover" }}
+                                    />
+                                  ) : (
+                                    <div
+                                      className="bg-light d-flex align-items-center justify-content-center"
+                                      style={{ width: "60px", height: "60px" }}
+                                    >
+                                      <span className="text-muted small">Sin imagen</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td>{variante.NombreProducto}</td>
+                                <td>{variante.Stock || 0}</td>
+                                <td>${Number(variante.Precio || 0).toLocaleString()}</td>
+                                <td>{variante.CodigoBarras || variante.Referencia || "N/A"}</td>
+                                <td>
+                                  <div className="btn-group btn-group-sm">
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline-primary"
+                                      onClick={() => handleEditVariant(index)}
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline-danger"
+                                      onClick={() => handleConfirmDeleteVariant(index)}
+                                    >
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="alert alert-info">
+                        Este producto no tiene variantes. Haga clic en "Agregar Variante" para crear una.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1284,12 +1017,16 @@ const RegistrarProducto = () => {
                   type="button"
                   className="btn btn-primary"
                   onClick={handleSaveProduct}
-                  disabled={imagenesLoading.some((loading) => loading) || isSaving}
+                  disabled={isSaving || imagenesLoading.some((loading) => loading)}
                 >
-                  {isSaving ? (
+                  {isSaving || imagenesLoading.some((loading) => loading) ? (
                     <>
                       <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      {isEditing ? "Actualizando..." : "Guardando..."}
+                      {imagenesLoading.some((loading) => loading)
+                        ? "Subiendo imágenes..."
+                        : isEditing
+                          ? "Actualizando..."
+                          : "Guardando..."}
                     </>
                   ) : (
                     <>
@@ -1311,28 +1048,6 @@ const RegistrarProducto = () => {
         onCancel={handleCancelDelete}
         onConfirm={handleDeleteVariant}
         itemType={itemToDelete?.type === "variante" ? "variante" : "elemento"}
-      />
-
-      {/* Modales para atributos */}
-      <AttributeTypeModal
-        show={showAttributeTypeModal}
-        onClose={() => setShowAttributeTypeModal(false)}
-        onSuccess={handleAttributeTypeCreated}
-      />
-
-      <AttributeValueModal
-        show={showAttributeValueModal}
-        tipoAtributoId={selectedTipoAtributoId}
-        onClose={() => {
-          setShowAttributeValueModal(false);
-          setAttributeValueModalCallback(null);
-        }}
-        onSuccess={(nuevosValores) => {
-          handleAttributeValueCreated(nuevosValores); // Añadir esta línea
-          if (attributeValueModalCallback) {
-            attributeValueModalCallback(nuevosValores);
-          }
-        }}
       />
 
       {/* Contenedor para las notificaciones */}
